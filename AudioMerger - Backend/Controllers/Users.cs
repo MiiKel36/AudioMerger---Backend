@@ -19,7 +19,7 @@ namespace AudioMerger___Backend.Controllers
             _db = db;
         }
 
-        [HttpPost]
+        [HttpPost("Register")]
         public IActionResult Register(UserDbModel request)
         {
             try
@@ -71,7 +71,7 @@ namespace AudioMerger___Backend.Controllers
 
         }
 
-        [HttpGet]
+        [HttpPost("Login")]
         public IActionResult Login(UserDbModel request)
         {
             try 
@@ -97,7 +97,7 @@ namespace AudioMerger___Backend.Controllers
                 }
 
                 dynamic hasUser = userExist(request);
-                bool isValid = (hasUser != null) || (hasUser.UserPassword == request.UserPassword);
+                bool isValid = (hasUser != null) && (hasUser.UserPassword == request.UserPassword);
 
                 if (!isValid) return Conflict(new { message = $"Usuario não cadastrado cadastrado" });
                 

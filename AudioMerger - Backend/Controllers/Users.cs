@@ -102,12 +102,20 @@ namespace AudioMerger___Backend.Controllers
             }
         }
 
-        [Authorize]
         [HttpGet("profile")]
         public IActionResult GetProfile(string jwtToken) {
 
-            var teste = _jwt.ValidateToken(jwtToken);
-            return Ok( teste );
+            //var teste = _jwt.ValidateToken(jwtToken);
+            var principal = _jwt.ValidateToken(jwtToken);
+
+            // Extract only the data you need
+            var result = new
+            {
+                Username = principal.FindFirst(ClaimTypes.Name)?.Value,
+                UserId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            };
+
+            return Ok(result); // Returns { "Username": "alice", "UserId": "123" }
         }
 
         // Função para verificar se o usuário existe

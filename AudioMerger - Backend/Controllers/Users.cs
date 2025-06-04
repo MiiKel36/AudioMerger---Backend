@@ -108,6 +108,8 @@ namespace AudioMerger___Backend.Controllers
             //var teste = _jwt.ValidateToken(jwtToken);
             var principal = _jwt.ValidateToken(jwtToken);
 
+            if (principal == null) return BadRequest("Not valid token");
+
             // Extract only the data you need
             var result = new
             {
@@ -115,7 +117,7 @@ namespace AudioMerger___Backend.Controllers
                 UserId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value
             };
 
-            return Ok(result); // Returns { "Username": "alice", "UserId": "123" }
+            return Ok(result);
         }
 
         // Função para verificar se o usuário existe

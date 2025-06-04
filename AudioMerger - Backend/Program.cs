@@ -3,21 +3,27 @@ using AudioMerger___Backend.DataBase;
 using AudioMerger___Backend.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.SqlServer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ===== 1. Lê a chave JWT do appsettings.json =====
+var jwtKey = builder.Configuration.GetConnectionString("key"); // Supondo que esteja em "ConnectionStrings:key"
+var keyBytes = Encoding.UTF8.GetBytes(jwtKey);
 
-// Configurar MySQL com Pomelo
+// ===== 2. Configura o banco de dados MySQL =====
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
 try
 {
     builder.Services.AddDbContext<DataBaseModel>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))); // Alterado para UseMySql
+        options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
-} catch (Exception ex)
+}
+catch (Exception ex)
 {
-    //Logs objects
     CreateLogs log = new CreateLogs();
     LogModel logModel = new LogModel
     {
@@ -30,17 +36,33 @@ try
     log.CreateLog(logModel);
 }
 
+// ===== 3. Configura autenticação JWT =====
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(keyBytes)
+    };
+});
 
-// Add services to the container.
-
+// ===== 4. Outros serviços =====
+builder.Services.AddAuthorization();
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// ===== 5. Middlewares =====
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -49,6 +71,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Ativa autenticação e autorização
+app.UseAuthentication(); // <-- IMPORTANTE: antes do UseAuthorization
 app.UseAuthorization();
 
 app.MapControllers();

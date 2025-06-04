@@ -5,6 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using AudioMerger___Backend.DataBase;
 using AudioMerger___Backend.Classes;
 using System.Net;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.AspNetCore.Authorization;
 
 namespace AudioMerger___Backend.Controllers
 {
@@ -13,10 +18,13 @@ namespace AudioMerger___Backend.Controllers
     public class UsersController : ControllerBase
     {
         private readonly DataBaseModel _db;
+        private readonly IConfiguration _config;
 
-        public UsersController(DataBaseModel db)
+        private JasonWebToken _jwt = new();
+        public UsersController(DataBaseModel db, IConfiguration config)
         {
             _db = db;
+            _config = config;
         }
 
         [HttpPost("Register")]
@@ -29,106 +37,101 @@ namespace AudioMerger___Backend.Controllers
                 {
                     string errorMsg = "Cannot connect to data base";
 
-                    //Logs objects
-                    CreateLogs log = new CreateLogs();
-                    LogModel logModel = new LogModel
-                    {
-                        User = request.UserName,
-                        ErrorFile = "Users.cs",
-                        ErrorMsg = errorMsg,
-                        Date = DateTime.Now.ToString("MM/dd/yyyy hh:mm tt")
-                    };
-
-                    log.CreateLog(logModel);
-
+                    LogError(request.UserName, "Users.cs", errorMsg);
                     return BadRequest(errorMsg);
                 }
 
                 dynamic hasUser = userExist(request);
-                if (hasUser != null) return Conflict(new { message = $"Email ja cadastrado" });
+                if (hasUser != null)
+                    return Conflict(new { message = "Email já cadastrado" });
 
                 _db.Usuarios.Add(request);
                 _db.SaveChanges();
 
-                return Ok("Usuario cadastrado no banco de dados");
+                hasUser = userExist(request);
+
+                // Gerar token JWT
+                var token = _jwt.GenerateJwtToken(hasUser.UserName, hasUser.UserId) ;
+
+                return Ok(new
+                {
+                    token,
+                    message = "Usuário cadastrado com sucesso"
+                });
             }
             catch (Exception ex)
             {
-                //Logs objects
-                CreateLogs log = new CreateLogs();
-                LogModel logModel = new LogModel
-                {
-                    User = request.UserName,
-                    ErrorFile = "Users.cs",
-                    ErrorMsg = ex.Message,
-                    Date = DateTime.Now.ToString("MM/dd/yyyy hh:mm tt")
-                };
-
-                log.CreateLog(logModel);
-
-                return BadRequest("Somethin went wrong " + ex.Message);
+                LogError(request.UserName, "Users.cs", ex.Message);
+                return BadRequest("Something went wrong: " + ex.Message);
             }
-
         }
 
         [HttpPost("Login")]
         public IActionResult Login(UserDbModel request)
         {
-            try 
+            try
             {
                 bool canConnect = _db.Database.CanConnect();
                 if (!canConnect)
                 {
                     string errorMsg = "Cannot connect to data base";
 
-                    //Logs objects
-                    CreateLogs log = new CreateLogs();
-                    LogModel logModel = new LogModel
-                    {
-                        User = request.UserName,
-                        ErrorFile = "Users.cs",
-                        ErrorMsg = errorMsg,
-                        Date = DateTime.Now.ToString("MM/dd/yyyy hh:mm tt")
-                    };
-
-                    log.CreateLog(logModel);
-
+                    LogError(request.UserName, "Users.cs", errorMsg);
                     return BadRequest(errorMsg);
                 }
 
                 dynamic hasUser = userExist(request);
                 bool isValid = (hasUser != null) && (hasUser.UserPassword == request.UserPassword);
 
-                if (!isValid) return Conflict(new { message = $"Usuario não cadastrado cadastrado" });
-                
-                return Ok("User exist on database");
+                if (!isValid)
+                    return Conflict(new { message = "Usuário não cadastrado" });
+
+                // Gerar token JWT
+                var token = _jwt.GenerateJwtToken(hasUser.UserName, hasUser.UserId);
+
+                return Ok(new
+                {
+                    token,
+                    message = "Login realizado com sucesso"
+                });
             }
             catch (Exception ex)
             {
-                //Logs objects
-                CreateLogs log = new CreateLogs();
-                LogModel logModel = new LogModel
-                {
-                    User = request.UserName,
-                    ErrorFile = "Users.cs",
-                    ErrorMsg = ex.Message,
-                    Date = DateTime.Now.ToString("MM/dd/yyyy hh:mm tt")
-                };
-
-                log.CreateLog(logModel);
-
-                return BadRequest("Somethin went wrong " + ex.Message);
+                LogError(request.UserName, "Users.cs", ex.Message);
+                return BadRequest("Something went wrong: " + ex.Message);
             }
-
         }
 
+        [Authorize]
+        [HttpGet("profile")]
+        public IActionResult GetProfile(string jwtToken) {
 
+            var teste = _jwt.ValidateToken(jwtToken);
+            return Ok( teste );
+        }
 
-        //Funcitions
+        // Função para verificar se o usuário existe
         [NonAction]
         public dynamic userExist(UserDbModel request)
         {
-            return _db.Usuarios.FirstOrDefault(x => x.Email == request.Email);        
+            return _db.Usuarios.FirstOrDefault(x => x.Email == request.Email);
         }
+
+        // Função auxiliar para log de erros
+        [NonAction]
+        private void LogError(string user, string file, string message)
+        {
+            CreateLogs log = new CreateLogs();
+            LogModel logModel = new LogModel
+            {
+                User = user,
+                ErrorFile = file,
+                ErrorMsg = message,
+                Date = DateTime.Now.ToString("MM/dd/yyyy hh:mm tt")
+            };
+
+            log.CreateLog(logModel);
+        }
+
     }
 }
